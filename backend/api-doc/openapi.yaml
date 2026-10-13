@@ -1,0 +1,240 @@
+openapi: 3.0.3
+info:
+  title: TodoList API
+  version: 1.0.0
+  description: REST API for a shared todo list. The API does not authenticate callers.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness check
+      responses:
+        "200":
+          description: Process is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        "200":
+          description: Database is reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: Database is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /api/v1/todos:
+    get:
+      summary: List todos
+      parameters:
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, maximum: 10000, default: 1}
+        - in: query
+          name: page_size
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - in: query
+          name: completed
+          schema: {type: string, enum: ["true", "false"]}
+        - in: query
+          name: q
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: sort
+          schema: {type: string, enum: [created_at, due_date, title], default: created_at}
+        - in: query
+          name: order
+          schema: {type: string, enum: [asc, desc], default: desc}
+      responses:
+        "200":
+          description: A page of todos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoList"
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      summary: Create a todo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTodo"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/todos/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TodoID"
+    get:
+      summary: Retrieve a todo
+      responses:
+        "200":
+          description: The todo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      summary: Update title, description, or due date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTodo"
+      responses:
+        "200":
+          description: Updated todo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      summary: Delete a todo
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/todos/{id}/completion:
+    parameters:
+      - $ref: "#/components/parameters/TodoID"
+    patch:
+      summary: Mark a todo complete or incomplete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCompletion"
+      responses:
+        "200":
+          description: Updated todo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+components:
+  parameters:
+    TodoID:
+      in: path
+      name: id
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [ok, unavailable]}
+    CreateTodo:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 2000}
+        due_date: {type: string, format: date-time, nullable: true}
+    UpdateTodo:
+      type: object
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 2000}
+        due_date: {type: string, format: date-time, nullable: true}
+    SetCompletion:
+      type: object
+      required: [completed]
+      properties:
+        completed: {type: boolean}
+    Todo:
+      type: object
+      required: [id, title, description, completed, due_date, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        description: {type: string}
+        completed: {type: boolean}
+        due_date: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    TodoEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Todo"
+    TodoList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Todo"
+        pagination:
+          type: object
+          required: [page, page_size, total, total_pages]
+          properties:
+            page: {type: integer}
+            page_size: {type: integer}
+            total: {type: integer}
+            total_pages: {type: integer}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            details:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field: {type: string}
+                  message: {type: string}
